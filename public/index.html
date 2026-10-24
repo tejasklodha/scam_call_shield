@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scam Call Shield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;600;700&family=Mukta:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1b2a41;
+    --muted: #5b6b82;
+    --paper: #ffffff;
+    --line: #d5dfe9;
+    --tint: #eaf3f8;
+    --safe: #1f8a5b;
+    --caution: #c77d0a;
+    --danger: #c0262d;
+    --font: "Hind Vadodara", "Mukta", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--tint); color: var(--ink); font-family: var(--font); font-size: 19px; line-height: 1.5; transition: background 1.2s ease; }
+  body.caution { --tint: #fbf1dc; }
+  body.danger  { --tint: #f9dede; }
+
+  header { padding: 1.25rem 1.5rem 0; max-width: 1080px; margin: 0 auto; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+  header p { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 1.25rem 1.5rem 3rem; display: grid; grid-template-columns: 1fr 1.1fr; gap: 1.5rem; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  select, button { font: inherit; font-size: 1rem; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); padding: .65rem 1rem; }
+  button { cursor: pointer; font-weight: 600; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #startBtn { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .toggle { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .95rem; }
+  #saveBtn { margin-left: auto; font-size: .9rem; }
+
+  .phone { background: var(--paper); border: 1px solid var(--line); border-radius: 28px; padding: 1.5rem; display: flex; flex-direction: column; min-height: 420px; }
+  .caller { text-align: center; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+  .caller .who { font-size: 1.4rem; font-weight: 700; }
+  .caller .state { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #transcript { flex: 1; overflow-y: auto; padding-top: 1rem; max-height: 380px; }
+  #transcript p { margin: 0 0 .75rem; color: var(--muted); }
+  #transcript p:last-child { color: var(--ink); }
+  #transcript .empty { color: var(--muted); font-style: italic; }
+
+  .shield { display: flex; flex-direction: column; gap: 1.25rem; }
+  .risk { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 1.5rem; }
+  .risk-row { display: flex; align-items: baseline; gap: 1rem; }
+  #score { font-family: "Mukta", sans-serif; font-size: 5rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--safe); transition: color .8s; }
+  #verdict { font-size: 1.35rem; font-weight: 700; }
+  .bar { height: 14px; background: var(--line); border-radius: 999px; overflow: hidden; margin-top: 1rem; }
+  #fill { height: 100%; width: 0; background: var(--safe); transition: width .9s ease, background .9s; }
+  #why { margin: .9rem 0 0; color: var(--muted); }
+
+  .flags { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 1.25rem 1.5rem; }
+  .flags h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+  #flags { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  #flags li { border-left: 4px solid var(--danger); padding: .35rem .75rem; background: #fdf1f1; border-radius: 0 8px 8px 0; animation: in .35s ease; }
+  #flags .none { border: none; background: none; color: var(--muted); padding: 0; animation: none; }
+  @keyframes in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
+  /* Behind the scenes: live AI activity */
+  /* Docked on the right (bottom on small screens) so it stays visible, even over the red warning */
+  body { padding-right: 400px; }
+  .scenes { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 30; display: flex; flex-direction: column; background: var(--ink); color: #e6edf5; padding: 1.1rem 1.1rem 1rem; box-shadow: -6px 0 24px rgba(0,0,0,.18); }
+  @media (max-width: 1100px) {
+    body { padding-right: 0; padding-bottom: 42vh; }
+    .scenes { top: auto; left: 0; width: auto; height: 42vh; box-shadow: 0 -6px 24px rgba(0,0,0,.18); }
+  }
+  .scenes-head { display: flex; align-items: baseline; gap: .75rem; margin-bottom: .6rem; flex-wrap: wrap; }
+  .scenes-head h2 { margin: 0; font-size: 1.05rem; }
+  .scenes-head span { color: #9fb0c7; font-size: .85rem; }
+  .scenes-head #modelNow { width: 100%; font-family: var(--mono); font-size: .8rem; color: #9fd8ff; }
+  #log { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: .8rem; line-height: 1.5; flex: 1; overflow-y: auto; }
+  #log li { display: grid; grid-template-columns: 4.6rem 1.5rem 1fr; gap: .25rem; padding: .15rem 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  #log .api .tx { color: #c9b8ff; }
+  #log details { margin-top: .2rem; color: #cfd8e3; }
+  #log summary { cursor: pointer; color: #9fd8ff; font-size: .75rem; }
+  #log summary:focus-visible { outline: 2px solid #9fd8ff; }
+  #log pre { margin: .3rem 0 .4rem; padding: .5rem .6rem; background: rgba(255,255,255,.07); border-radius: 6px; font-size: .72rem; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }
+  #log time { color: #7f91aa; }
+  #log .live .tx { color: #9fd8ff; }
+  #log .ok .tx { color: #8fe0b5; }
+  #log .warn .tx { color: #f5c26b; }
+  #log .err .tx { color: #ff9f9f; }
+  #log .big .tx { color: #fff; font-weight: 700; }
+
+  #alert { position: fixed; inset: 0 400px 0 0; background: var(--danger); color: #fff; display: flex; align-items: center; justify-content: center; padding: 1.5rem; z-index: 10; overflow-y: auto; }
+  #alert[hidden] { display: none; }
+  .alert-box { max-width: 780px; text-align: center; }
+  .alert-box h2 { font-size: clamp(2.2rem, 7vw, 4rem); margin: 0 0 .5rem; line-height: 1.1; }
+  #alertGu { font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 600; margin: .5rem 0; }
+  #alertHi { font-family: "Mukta", sans-serif; font-size: clamp(1.2rem, 3.4vw, 1.7rem); margin: .5rem 0; opacity: .95; }
+  #alertWhy { opacity: .9; margin: 1rem 0; }
+  #voiceState { font-size: .95rem; opacity: .9; margin: 0 0 1rem; }
+  .helpline { display: inline-block; background: #fff; color: var(--danger); font-weight: 700; padding: .4rem 1rem; border-radius: 999px; margin: .5rem 0 1.25rem; }
+  .alert-actions { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+  .alert-actions button { font-size: 1.2rem; padding: .9rem 1.4rem; border: 2px solid #fff; background: transparent; color: #fff; }
+  .alert-actions #cutBtn { background: #fff; color: var(--danger); }
+
+  #toast { position: fixed; left: 40%; bottom: 1.5rem; transform: translateX(-50%); background: var(--ink); color: #fff; padding: .7rem 1.2rem; border-radius: 10px; z-index: 40; font-size: .95rem; max-width: 90vw; }
+  #toast[hidden] { display: none; }
+
+  @media (max-width: 1100px) { #alert { inset: 0 0 42vh 0; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛡️ Scam Call Shield</h1>
+  <p>Listens to the call with you and warns you in Gujarati or Hindi</p>
+</header>
+
+<main>
+  <div class="controls">
+    <select id="callSelect" aria-label="Choose a sample call"></select>
+    <button id="startBtn">Start call</button>
+    <label class="toggle"><input type="checkbox" id="offline"> Offline mode (cached run)</label>
+    <button id="saveBtn" title="Download this run so it can play without internet">Save run as cached.json</button>
+  </div>
+
+  <section class="phone" aria-label="Incoming call">
+    <div class="caller">
+      <div class="who">📞 Unknown number</div>
+      <div class="state" id="callState">Ready</div>
+    </div>
+    <div id="transcript" aria-live="polite"><p class="empty">The call’s words will appear here as it plays.</p></div>
+  </section>
+
+  <section class="shield" aria-label="Scam check">
+    <div class="risk">
+      <div class="risk-row">
+        <div id="score">0</div>
+        <div id="verdict">Waiting for the call</div>
+      </div>
+      <div class="bar"><div id="fill"></div></div>
+      <p id="why">Press “Start call” to begin.</p>
+    </div>
+    <div class="flags">
+      <h2>Warning signs heard so far</h2>
+      <ul id="flags"><li class="none">None yet</li></ul>
+    </div>
+  </section>
+
+  <section class="scenes" aria-label="What the AI is doing">
+    <div class="scenes-head">
+      <h2>Behind the scenes</h2>
+      <span>What the AI is doing right now</span>
+      <span id="modelNow">Gemini model in use: –</span>
+    </div>
+    <ul id="log"></ul>
+  </section>
+</main>
+
+<div id="alert" hidden role="alertdialog" aria-labelledby="alertTitle">
+  <div class="alert-box">
+    <h2 id="alertTitle">⚠️ This call is a scam</h2>
+    <p id="alertGu"></p>
+    <p id="alertHi"></p>
+    <p id="alertWhy"></p>
+    <p id="voiceState"></p>
+    <div class="helpline">Cyber crime helpline: 1930</div>
+    <div class="alert-actions">
+      <button id="cutBtn">📵 Cut the call</button>
+      <button id="familyBtn">👨‍👩‍👧 Alert my family</button>
+      <button id="replayBtn">🔊 Hear warning again</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+<audio id="player"></audio>
+
+<script src="config.js"></script>
+<script>
+/* ===================== SETTINGS: edit these ===================== */
+const API_KEY = window.GEMINI_API_KEY || "PASTE_YOUR_GEMINI_API_KEY_HERE";   // from aistudio.google.com
+const ANALYSIS_MODEL = "gemini-3.7-flash";      // first choice; backups below
+const TTS_MODEL = "gemini-3.8-flash-tts";       // first choice; backups below
+const TTS_VOICE = "Kore";
+const SPEAK_LANG = "gujarati";                  // "gujarati" or "hindi"
+const ALERT_AT = 70;                            // risk score that triggers the red screen
+const ANALYSIS_TIMEOUT_MS = 20000;              // skip a model that takes longer than this
+const TTS_TIMEOUT_MS = 30000;
+
+const BACKUPS = {
+  [ANALYSIS_MODEL]: ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+  [TTS_MODEL]: ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"],
+};
+
+// Audio parts in playing order. Files are in public/audio/
+const CALLS = {
+  "Digital arrest scam (Hindi)": ["audio/digital_1.wav","audio/digital_2.wav","audio/digital_3.wav","audio/digital_4.wav","audio/digital_5.wav","audio/digital_6.wav"],
+  "Normal courier call (Gujarati)": ["audio/normal_1.wav","audio/normal_2.wav","audio/normal_3.wav","audio/normal_4.wav"],
+};
+/* ================================================================ */
+
+const SYSTEM = `You are Scam Call Shield. You protect elderly and first-time smartphone users in Gujarat, India, by listening to a phone call while it is happening, one short part at a time.
+
+Common Indian phone scams:
+- Digital arrest: caller claims to be police, CBI, customs, TRAI or narcotics; says a parcel or SIM in the victim's name is linked to drugs or money laundering; keeps the victim on a video call; says not to tell family; demands money transfer for "verification".
+- Fake KYC: caller claims to be from a bank; says the account or pension will be blocked today; asks to click a link, install a screen-sharing app, or share an OTP, PIN or card details.
+- Fake courier: says a parcel is stuck; asks for a small fee, a link click, or personal documents.
+
+Facts to use in explanations:
+- Police and CBI never arrest anyone over a phone or video call.
+- Banks never ask for OTP or PIN, or ask you to install an app, over a call.
+- No government agency asks you to transfer money to "verify" it.
+
+Scoring rules:
+- risk_score (0-100) is for the WHOLE call so far, not just the latest part.
+- Ordinary calls (delivery, family, doctor, shop) stay below 20, even if they mention parcels or banks.
+- Raise the score as warning signs pile up: pretending to be an authority, threats, urgency, secrecy, asking for money, OTP or app installs.
+- Never lower the score sharply once clear scam signs have appeared.
+
+Writing rules:
+- transcript: the words spoken in THIS part only, in the original language and script, with speaker labels if clear.
+- red_flags: every warning sign heard so far in the whole call, short English labels of 2 to 5 words, e.g. "Pretends to be CBI". Empty list if none.
+- why_simple: one short sentence in simple English explaining the score.
+- warning_gujarati and warning_hindi: two very short, simple sentences each, as if speaking to a grandparent, saying clearly what to do (cut the call, do not pay, do not share OTP). Use Gujarati script and Devanagari script. If the call seems safe, write a short calm line instead.`;
+
+const SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    transcript: { type: "STRING" },
+    risk_score: { type: "INTEGER" },
+    scam_type: { type: "STRING", enum: ["digital_arrest", "fake_kyc", "fake_courier", "other_scam", "none"] },
+    red_flags: { type: "ARRAY", items: { type: "STRING" } },
+    why_simple: { type: "STRING" },
+    warning_gujarati: { type: "STRING" },
+    warning_hindi: { type: "STRING" },
+  },
+  required: ["transcript", "risk_score", "scam_type", "red_flags", "why_simple", "warning_gujarati", "warning_hindi"],
+};
+
+const $ = (id) => document.getElementById(id);
+let cache = {};            // { callName: { parts: [...results], tts: base64 } }
+let stopRequested = false;
+let lastWarningAudio = null;
+let audioCtx = null;
+const deadModels = new Set();   // retired (404) or out of daily quota: never tried again
+const lastGood = {};            // model that last worked for each job: tried first next time
+
+/* ---------- live activity log ---------- */
+const secs = (t0) => ((performance.now() - t0) / 1000).toFixed(1) + "s";
+function addLog(icon, text, kind = "") {
+  const li = document.createElement("li"); li.className = kind;
+  const time = document.createElement("time"); time.textContent = new Date().toLocaleTimeString("en-GB");
+  const ic = document.createElement("span"); ic.className = "ic"; ic.textContent = icon;
+  const tx = document.createElement("span"); tx.className = "tx"; tx.textContent = text;
+  li.append(time, ic, tx); $("log").appendChild(li); $("log").scrollTop = $("log").scrollHeight;
+  return li;
+}
+function logLive(text) {
+  const li = addLog("⏳", `${text} … 0.0s`, "live"); const t0 = performance.now();
+  const h = setInterval(() => { li.querySelector(".tx").textContent = `${text} … ${secs(t0)}`; }, 100);
+  return {
+    li,
+    done(icon, t, kind = "") { clearInterval(h); li.className = kind; li.querySelector(".ic").textContent = icon; li.querySelector(".tx").textContent = t; $("log").scrollTop = $("log").scrollHeight; },
+  };
+}
+
+// Shows the exact JSON sent to / received from Gemini, with long audio data shortened.
+function redact(obj) {
+  return JSON.parse(JSON.stringify(obj, (k, v) =>
+    (k === "data" && typeof v === "string" && v.length > 200) ? `<${Math.round(v.length * 0.75 / 1024)} KB of base64 audio>` : v));
+}
+function readable(json) {
+  const c = redact(json);
+  try { const t = c.candidates[0].content.parts[0].text; if (t) c.candidates[0].content.parts[0].text = JSON.parse(t); } catch {}
+  return c;
+}
+function addDetails(li, label, obj) {
+  const d = document.createElement("details");
+  const sm = document.createElement("summary"); sm.textContent = `▸ ${label}`;
+  const pre = document.createElement("pre"); pre.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+  d.append(sm, pre); li.querySelector(".tx").appendChild(d);
+}
+
+/* ---------- setup ---------- */
+for (const name of Object.keys(CALLS)) {
+  const o = document.createElement("option"); o.textContent = name; $("callSelect").appendChild(o);
+}
+fetch("cached.json", { cache: "no-store" })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { if (d) { cache = d; addLog("💾", `Saved runs found for offline mode: ${Object.keys(d).join(", ")}`, "ok"); } })
+  .catch(() => {});
+addLog("🛡️", "Shield ready. Pick a call and press Start call.");
+
+$("startBtn").onclick = startCall;
+$("saveBtn").onclick = saveCache;
+$("cutBtn").onclick = cutCall;
+$("familyBtn").onclick = alertFamily;
+$("replayBtn").onclick = () => { if (lastWarningAudio) { addLog("🔊", "Replaying spoken warning"); playPcm(lastWarningAudio); } };
+
+/* ---------- helpers ---------- */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+function toast(msg, ms = 3500) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, ms); }
+function blobToBase64(blob) {
+  return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(",")[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
+}
+
+/* Calls Gemini, trying backup models when one is busy, slow, rate-limited or retired. */
+async function gemini(model, body, job, timeoutMs) {
+  const order = [lastGood[model], model, ...(BACKUPS[model] || [])].filter((m, i, a) => m && a.indexOf(m) === i);
+  let lastErr;
+  for (let round = 0; round < 2; round++) {
+    for (const m of order) {
+      if (deadModels.has(m)) continue;
+      $("modelNow").textContent = `Gemini model in use: ${m}`;
+      const apiLi = addLog("🌐", `API call → POST generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, "api");
+      addDetails(apiLi, "Request sent to Gemini (click to view)", redact(body));
+      const line = logLive(`${job}: waiting for ${m}`);
+      const t0 = performance.now();
+      let r;
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (e) {
+        lastErr = e;
+        line.done("⌛", `${job}: ${m} too slow (${secs(t0)}), switching model`, "warn");
+        continue;
+      }
+      if (r.ok) {
+        const json = await r.json();
+        lastGood[model] = m;
+        const u = json.usageMetadata || {};
+        line.done("✅", `${job}: HTTP 200 from ${m} in ${secs(t0)}` + (u.promptTokenCount ? ` · ${u.promptTokenCount} tokens in, ${u.candidatesTokenCount ?? 0} out` : ""), "ok");
+        addDetails(line.li, "Response from Gemini (click to view)", readable(json));
+        return json;
+      }
+      const txt = await r.text();
+      lastErr = new Error(`Gemini ${m} ${r.status}: ${txt}`); console.warn(lastErr.message);
+      const showErr = () => { let e = txt; try { e = JSON.parse(txt); } catch {} addDetails(line.li, `Error response HTTP ${r.status}`, e); };
+      if (r.status === 404) { deadModels.add(m); line.done("🚫", `${job}: ${m} not available (404), skipping it from now on`, "warn"); showErr(); continue; }
+      if (r.status === 429) {
+        if (txt.includes("PerDay")) deadModels.add(m);
+        line.done("⛔", `${job}: ${m} hit its free limit (429), switching model`, "warn"); showErr();
+      } else if (r.status >= 500) {
+        line.done("🔥", `${job}: ${m} overloaded (${r.status}), switching model`, "warn"); showErr();
+      } else {
+        line.done("❌", `${job}: ${m} error ${r.status}`, "err"); showErr(); throw lastErr;
+      }
+      await sleep(500);
+    }
+  }
+  throw lastErr || new Error("No Gemini model available right now");
+}
+
+async function analyzePart(i, url, history, prevScore) {
+  const blob = await (await fetch(url)).blob();
+  const data = await blobToBase64(blob);
+  const mimeType = blob.type && blob.type.startsWith("audio") ? blob.type : "audio/wav";
+  addLog("📤", `Part ${i + 1}: sending ${Math.round(blob.size / 1024)} KB of audio + notes from ${history.length} earlier part(s)`);
+  const context = history.length ? history.map((t, k) => `[Part ${k + 1}] ${t}`).join("\n") : "(the call has just started)";
+  const body = {
+    systemInstruction: { parts: [{ text: SYSTEM }] },
+    contents: [{ role: "user", parts: [
+      { text: `Call so far:\n${context}\n\nRisk score after the last part: ${prevScore}.\nListen to the NEXT part of the call (attached audio). Transcribe it and give the updated result for the whole call so far.` },
+      { inlineData: { mimeType, data } },
+    ]}],
+    generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA, temperature: 0.2 },
+  };
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const out = await gemini(ANALYSIS_MODEL, body, `Part ${i + 1} analysis`, ANALYSIS_TIMEOUT_MS);
+      const text = out.candidates[0].content.parts.map(p => p.text || "").join("");
+      return JSON.parse(text);
+    } catch (e) {
+      lastErr = e; console.warn("Analysis attempt failed", e);
+      if (e instanceof SyntaxError) addLog("⚠️", `Part ${i + 1}: answer was not valid JSON, asking again`, "warn");
+    }
+  }
+  throw lastErr;
+}
+
+async function makeSpeech(text) {
+  const out = await gemini(TTS_MODEL, {
+    contents: [{ parts: [{ text: `Say this slowly, kindly and firmly, like a caring grandchild warning their grandparent: ${text}` }] }],
+    generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } } } },
+  }, "Voice warning", TTS_TIMEOUT_MS);
+  return out.candidates[0].content.parts.find(p => p.inlineData).inlineData.data; // 24 kHz 16-bit mono PCM
+}
+
+function playPcm(b64) {
+  audioCtx = audioCtx || new AudioContext();
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const samples = new Int16Array(bytes.buffer, 0, Math.floor(bytes.length / 2));
+  const buf = audioCtx.createBuffer(1, samples.length, 24000);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) ch[i] = samples[i] / 32768;
+  const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination); src.start();
+}
+
+function playPart(url) {
+  return new Promise(res => { const p = $("player"); p.src = url; p.onended = res; p.onerror = res; p.play().catch(res); });
+}
+
+/* ---------- UI ---------- */
+function resetUI() {
+  $("transcript").innerHTML = ""; $("flags").innerHTML = '<li class="none">None yet</li>';
+  setRisk(0, "Listening…", "Checking the call as it plays.");
+  document.body.className = ""; $("alert").hidden = true;
+}
+
+function setRisk(score, verdict, why) {
+  const color = score >= ALERT_AT ? "var(--danger)" : score >= 40 ? "var(--caution)" : "var(--safe)";
+  $("score").textContent = score; $("score").style.color = color;
+  $("fill").style.width = score + "%"; $("fill").style.background = color;
+  $("verdict").textContent = verdict; $("why").textContent = why;
+  document.body.className = score >= ALERT_AT ? "danger" : score >= 40 ? "caution" : "";
+}
+
+function render(i, r) {
+  const p = document.createElement("p"); p.textContent = r.transcript; $("transcript").appendChild(p);
+  $("transcript").scrollTop = $("transcript").scrollHeight;
+  const verdict = r.risk_score >= ALERT_AT ? "🔴 Scam detected" : r.risk_score >= 40 ? "🟠 Suspicious call" : "🟢 Looks normal so far";
+  setRisk(r.risk_score, verdict, r.why_simple);
+  addLog("🧠", `Part ${i + 1}: risk ${r.risk_score}/100 · type: ${r.scam_type} · ${r.why_simple}`, r.risk_score >= ALERT_AT ? "err" : r.risk_score >= 40 ? "warn" : "ok");
+  const list = $("flags"); const seen = new Set([...list.querySelectorAll("li:not(.none)")].map(li => li.textContent.toLowerCase()));
+  for (const f of r.red_flags || []) {
+    if (seen.has(f.toLowerCase())) continue;
+    list.querySelector(".none")?.remove();
+    const li = document.createElement("li"); li.textContent = f; list.appendChild(li); seen.add(f.toLowerCase());
+    addLog("🚩", `New warning sign: ${f}`, "warn");
+  }
+}
+
+/* ---------- main flow ---------- */
+async function startCall() {
+  const name = $("callSelect").value, parts = CALLS[name], offline = $("offline").checked;
+  if (offline && !cache[name]) { toast("No saved run for this call yet. Run it once online, then save it."); addLog("💾", `No saved run for “${name}” yet`, "warn"); return; }
+  if (!offline && API_KEY.startsWith("PASTE")) { toast("Add your Gemini API key at the top of index.html."); return; }
+
+  resetUI(); stopRequested = false; lastWarningAudio = null;
+  $("startBtn").disabled = true;
+  addLog("📞", `Call started: ${name} (${parts.length} parts) · ${offline ? "OFFLINE mode, using saved Gemini answers" : "LIVE mode, Gemini listens to each part"}`, "big");
+  const run = { parts: [], tts: null };
+  const history = []; let prev = 0; let alerted = false;
+
+  for (let i = 0; i < parts.length && !stopRequested; i++) {
+    $("callState").textContent = `On call · part ${i + 1} of ${parts.length}`;
+    addLog("🎧", `Part ${i + 1}: playing audio, analysing at the same time`);
+    const analysis = (offline
+        ? sleep(700).then(() => { addLog("💾", `Part ${i + 1}: using saved Gemini answer (offline)`); return cache[name].parts[i]; })
+        : analyzePart(i, parts[i], history, prev))
+      .catch(e => { console.error(e); addLog("❌", `Part ${i + 1}: no model could answer. Skipping this part.`, "err"); toast("Couldn’t reach Gemini for this part. Check the API key or internet."); return null; });
+    const played = playPart(parts[i]).then(() => { if (!stopRequested) $("callState").textContent = `Checking part ${i + 1}…`; });
+    const [result] = await Promise.all([analysis, played]);
+    if (stopRequested) break;
+    if (!result) continue;
+    run.parts.push(result); history.push(result.transcript); prev = result.risk_score;
+    render(i, result);
+    if (result.risk_score >= ALERT_AT) { alerted = true; await showAlert(result, offline ? cache[name].tts : null, run); break; }
+  }
+
+  if (!alerted && !stopRequested) {
+    $("callState").textContent = prev < 40 ? "Call ended · no scam found ✅" : "Call ended · be careful";
+    addLog(prev < 40 ? "✅" : "⚠️", prev < 40 ? "Call ended. No scam found, no warning needed." : "Call ended. Some warning signs, stay careful.", prev < 40 ? "ok" : "warn");
+  }
+  if (!offline && run.parts.length) { cache[name] = run; addLog("💾", "This run is ready to save for offline mode"); }
+  $("startBtn").disabled = false;
+}
+
+async function showAlert(r, cachedTts, run) {
+  $("player").pause();
+  $("callState").textContent = "Call paused by Shield";
+  addLog("🚨", `Risk ${r.risk_score} ≥ ${ALERT_AT}: call paused, red warning shown`, "big");
+  $("alertGu").textContent = r.warning_gujarati;
+  $("alertHi").textContent = r.warning_hindi;
+  $("alertWhy").textContent = r.why_simple;
+  $("voiceState").textContent = "Preparing spoken warning…";
+  $("alert").hidden = false;
+  try {
+    let b64 = cachedTts;
+    if (b64) addLog("💾", "Using saved spoken warning (offline)");
+    else {
+      addLog("🗣️", `Turning the ${SPEAK_LANG === "hindi" ? "Hindi" : "Gujarati"} warning into speech`);
+      b64 = await makeSpeech(SPEAK_LANG === "hindi" ? r.warning_hindi : r.warning_gujarati);
+    }
+    run.tts = b64; lastWarningAudio = b64; playPcm(b64);
+    $("voiceState").textContent = "🔊 Speaking the warning";
+    addLog("🔊", "Playing spoken warning", "ok");
+  } catch (e) {
+    console.error(e);
+    $("voiceState").textContent = "";
+    addLog("❌", "Spoken warning unavailable (all speech models busy or out of limit). Text warning shown.", "err");
+    toast("Spoken warning unavailable. Showing text only.");
+  }
+}
+
+function cutCall() {
+  stopRequested = true; $("player").pause(); $("alert").hidden = true;
+  $("callState").textContent = "📵 Call cut. You are safe.";
+  addLog("📵", "User cut the call", "ok");
+  $("startBtn").disabled = false;
+}
+
+async function alertFamily() {
+  // MOCK: a real version would call a Firebase Cloud Function / messaging service here.
+  const payload = { to: "family-contact (mock)", score: $("score").textContent, signs: [...$("flags").querySelectorAll("li:not(.none)")].map(l => l.textContent), at: new Date().toISOString() };
+  console.log("[MOCK WEBHOOK] Family alert sent:", payload);
+  addLog("📡", `Mock webhook: family alert sent (risk ${payload.score}, ${payload.signs.length} signs). Demo stub, no real message.`, "ok");
+  toast("Family alerted (mock webhook for the demo)");
+}
+
+function saveCache() {
+  if (!Object.keys(cache).length) { toast("Run a call online first, then save it."); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(cache)], { type: "application/json" }));
+  a.download = "cached.json"; a.click();
+  addLog("💾", `Saved cached.json with: ${Object.keys(cache).join(", ")}`, "ok");
+  toast("Saved. Put cached.json in the public folder for offline mode.");
+}
+</script>
+</body>
+</html>
